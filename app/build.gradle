@@ -16,7 +16,7 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders = [cameraFacingFront: "True", binaryGraphName: "selfie_segmentation_gpu.binarypb",
-                                inputVideoStreamName: "cinput_video",
+                                inputVideoStreamName: "input_video",
                                 outputVideoStreamName:"output_video",
                                 flipFramesVertically:"True",
                                 converterNumBuffers:"2"]
