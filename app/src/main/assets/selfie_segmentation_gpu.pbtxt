@@ -1,133 +1,59 @@
-# MediaPipe graph to perform selfie segmentation. (GPU input, and all processing
-# and inference are also performed on GPU)
-#
-# It is required that "selfie_segmentation.tflite" or
-# "selfie_segmentation_landscape.tflite" is available at
-# "mediapipe/modules/selfie_segmentation/selfie_segmentation.tflite"
-# or
-# "mediapipe/modules/selfie_segmentation/selfie_segmentation_landscape.tflite"
-# path respectively during execution, depending on the specification in the
-# MODEL_SELECTION input side packet.
-#
-# EXAMPLE:
-#   node {
-#     calculator: "SelfieSegmentationGpu"
-#     input_side_packet: "MODEL_SELECTION:model_selection"
-#     input_stream: "IMAGE:image"
-#     output_stream: "SEGMENTATION_MASK:segmentation_mask"
-#   }
+# MediaPipe graph that performs selfie segmentation with TensorFlow Lite on GPU.
 
-type: "SelfieSegmentationGpu"
+# GPU buffer. (GpuBuffer)
+input_stream: "input_video"
 
-# GPU image. (GpuBuffer)
-input_stream: "IMAGE:image"
+# Output image with rendered results. (GpuBuffer)
+output_stream: "throttled_input_video_gpu"
 
-# An integer 0 or 1. Use 0 to select a general-purpose model (operating on a
-# 256x256 tensor), and 1 to select a model (operating on a 256x144 tensor) more
-# optimized for landscape images. If unspecified, functions as set to 0. (int)
-input_side_packet: "MODEL_SELECTION:model_selection"
-
-# Segmentation mask. (GpuBuffer in RGBA, with the same mask values in R and A)
-output_stream: "SEGMENTATION_MASK:segmentation_mask"
-
-# Resizes the input image into a tensor with a dimension desired by the model.
+# Throttles the images flowing downstream for flow control. It passes through
+# the very first incoming image unaltered, and waits for downstream nodes
+# (calculators and subgraphs) in the graph to finish their tasks before it
+# passes through another image. All images that come in while waiting are
+# dropped, limiting the number of in-flight images in most part of the graph to
+# 1. This prevents the downstream nodes from queuing up incoming images and data
+# excessively, which leads to increased latency and memory usage, unwanted in
+# real-time mobile applications. It also eliminates unnecessarily computation,
+# e.g., the output produced by a node may get dropped downstream if the
+# subsequent nodes are still busy processing previous inputs.
 node {
-  calculator: "SwitchContainer"
-  input_side_packet: "SELECT:model_selection"
-  input_stream: "IMAGE_GPU:image"
-  output_stream: "TENSORS:input_tensors"
-  options: {
-    [mediapipe.SwitchContainerOptions.ext] {
-      select: 0
-      contained_node: {
-        calculator: "ImageToTensorCalculator"
-        options: {
-          [mediapipe.ImageToTensorCalculatorOptions.ext] {
-            output_tensor_width: 256
-            output_tensor_height: 256
-            keep_aspect_ratio: false
-            output_tensor_float_range {
-              min: 0.0
-              max: 1.0
-            }
-            border_mode: BORDER_ZERO
-            gpu_origin: TOP_LEFT
-          }
-        }
-      }
-      contained_node: {
-        calculator: "ImageToTensorCalculator"
-        options: {
-          [mediapipe.ImageToTensorCalculatorOptions.ext] {
-            output_tensor_width: 256
-            output_tensor_height: 144
-            keep_aspect_ratio: false
-            output_tensor_float_range {
-              min: 0.0
-              max: 1.0
-            }
-            border_mode: BORDER_ZERO
-            gpu_origin: TOP_LEFT
-          }
-        }
-      }
+  calculator: "FlowLimiterCalculator"
+  input_stream: "input_video"
+  input_stream: "FINISHED:output_video"
+  input_stream_info: {
+    tag_index: "FINISHED"
+    back_edge: true
+  }
+  output_stream: "throttled_input_video"
+}
+
+# Subgraph that performs selfie segmentation.
+node {
+  calculator: "SelfieSegmentationGpu"
+  input_stream: "IMAGE:throttled_input_video"
+  output_stream: "SEGMENTATION_MASK:segmentation_mask"
+}
+
+
+# Colors the selfie segmentation with the color specified in the option.
+node {
+  calculator: "RecolorCalculator"
+  input_stream: "IMAGE_GPU:throttled_input_video"
+  input_stream: "MASK_GPU:segmentation_mask"
+  output_stream: "IMAGE_GPU:output_video"
+  node_options: {
+    [type.googleapis.com/mediapipe.RecolorCalculatorOptions] {
+      color { r: 0 g: 0 b: 255 }
+      mask_channel: RED
+      invert_mask: true
+      adjust_with_luminance: false
     }
   }
 }
 
-# Generates a single side packet containing a TensorFlow Lite op resolver that
-# supports custom ops needed by the model used in this graph.
-node {
-  calculator: "TfLiteCustomOpResolverCalculator"
-  output_side_packet: "op_resolver"
-  options: {
-    [mediapipe.TfLiteCustomOpResolverCalculatorOptions.ext] {
-      use_gpu: true
-    }
-  }
+node{
+	calculator:"GpuBufferToImageFrameCalculator"
+	input_stream:"output_video"
+	output_stream:"throttled_input_video_gpu"
 }
 
-# Loads the selfie segmentation TF Lite model.
-node {
-  calculator: "SelfieSegmentationModelLoader"
-  input_side_packet: "MODEL_SELECTION:model_selection"
-  output_side_packet: "MODEL:model"
-}
-
-# Runs model inference on GPU.
-node {
-  calculator: "InferenceCalculator"
-  input_stream: "TENSORS:input_tensors"
-  output_stream: "TENSORS:output_tensors"
-  input_side_packet: "MODEL:model"
-  input_side_packet: "CUSTOM_OP_RESOLVER:op_resolver"
-}
-
-# Retrieves the size of the input image.
-node {
-  calculator: "ImagePropertiesCalculator"
-  input_stream: "IMAGE_GPU:image"
-  output_stream: "SIZE:input_size"
-}
-
-# Processes the output tensors into a segmentation mask that has the same size
-# as the input image into the graph.
-node {
-  calculator: "TensorsToSegmentationCalculator"
-  input_stream: "TENSORS:output_tensors"
-  input_stream: "OUTPUT_SIZE:input_size"
-  output_stream: "MASK:mask_image"
-  options: {
-    [mediapipe.TensorsToSegmentationCalculatorOptions.ext] {
-      activation: NONE
-      gpu_origin: TOP_LEFT
-    }
-  }
-}
-
-# Converts the incoming Image into the corresponding GpuBuffer type.
-node: {
-  calculator: "FromImageCalculator"
-  input_stream: "IMAGE:mask_image"
-  output_stream: "IMAGE_GPU:segmentation_mask"
-}

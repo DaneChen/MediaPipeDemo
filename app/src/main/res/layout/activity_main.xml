@@ -16,5 +16,10 @@
             android:layout_width="fill_parent"
             android:gravity="center"
             android:text="@string/no_camera_access" />
+
+        <ImageView
+            android:id="@+id/handler_back_img"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
     </FrameLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -11,7 +11,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MediaPipeDemo2">
         <activity
-            android:name="com.danechen.mediapipedemo2.MainActivity"
+            android:name="com.danechen.mediapipedemo2.demo2.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>

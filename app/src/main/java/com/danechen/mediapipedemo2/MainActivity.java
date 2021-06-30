@@ -17,9 +17,10 @@ package com.danechen.mediapipedemo2;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.SurfaceTexture;
 import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
 import android.util.Size;
 import android.view.SurfaceHolder;
@@ -27,10 +28,11 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.appcompat.app.AppCompatActivity;
+
 import com.google.mediapipe.components.CameraHelper;
 import com.google.mediapipe.components.CameraXPreviewHelper;
 import com.google.mediapipe.components.ExternalTextureConverter;
-import com.google.mediapipe.components.FrameProcessor;
 import com.google.mediapipe.components.PermissionHelper;
 import com.google.mediapipe.framework.AndroidAssetUtil;
 import com.google.mediapipe.glutil.EglManager;
@@ -68,7 +70,7 @@ public class MainActivity extends AppCompatActivity {
 
   // Sends camera-preview frames into a MediaPipe graph for processing, and displays the processed
   // frames onto a {@link Surface}.
-  protected FrameProcessor processor;
+  protected MyFrameProcessor processor;
   // Handles camera access via the {@link CameraX} Jetpack support library.
   protected CameraXPreviewHelper cameraHelper;
 
@@ -106,11 +108,12 @@ public class MainActivity extends AppCompatActivity {
     AndroidAssetUtil.initializeNativeAssetManager(this);
     eglManager = new EglManager(null);
     processor =
-        new FrameProcessor(
+        new MyFrameProcessor(
             this,
             eglManager.getNativeContext(),
             applicationInfo.metaData.getString("binaryGraphName"),
             applicationInfo.metaData.getString("inputVideoStreamName"),
+             //   null);
             applicationInfo.metaData.getString("outputVideoStreamName"));
     processor
         .getVideoSurfaceOutput()
@@ -139,6 +142,12 @@ public class MainActivity extends AppCompatActivity {
     if (PermissionHelper.cameraPermissionsGranted(this)) {
       startCamera();
     }
+    //testBitmap();
+  }
+
+  private void testBitmap(){
+    Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.testface);
+    processor.onNewFrame(bitmap, System.currentTimeMillis());
   }
 
   @Override
